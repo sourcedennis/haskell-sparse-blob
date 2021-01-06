@@ -1,0 +1,90 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.33.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 8530ea7d8ba206eec3585b023835ee14f8ebb0696dbacf26ee4e9d19854fdb28
+
+name:           sparse-blob
+version:        0.0.1
+description:    Please see the README on GitHub at <https://github.com/sourcedennis/haskell-sparse-blob#readme>
+homepage:       https://github.com/sourcedennis/haskell-sparse-blob#readme
+bug-reports:    https://github.com/sourcedennis/haskell-sparse-blob/issues
+author:         Dennis Sprokholt
+maintainer:     me@dennis.life
+copyright:      2021 Dennis Sprokholt
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    LICENSE
+
+source-repository head
+  type: git
+  location: https://github.com/sourcedennis/haskell-sparse-blob
+
+library
+  exposed-modules:
+      Data.SparseBlob
+  other-modules:
+      Data.SparseBlob.Helpers
+      Data.SparseBlob.Internal
+      Data.SparseBlob.Range
+      Data.SparseBlob.SimpleBlob
+      Paths_sparse_blob
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+    , bytestring >=0.10 && <0.11
+    , containers >=0.6 && <0.7
+  default-language: Haskell2010
+
+test-suite sparse-blob-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Data.SparseBlob
+      Data.SparseBlob.Helpers
+      Data.SparseBlob.Internal
+      Data.SparseBlob.Range
+      Data.SparseBlob.SimpleBlob
+      Data.SparseBlob.HelpersTest
+      Data.SparseBlob.RangeTest
+      Data.SparseBlobTest
+      Paths_sparse_blob
+  hs-source-dirs:
+      src
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , bytestring >=0.10 && <0.11
+    , containers >=0.6 && <0.7
+    , tasty >=1.2.2 && <1.4
+    , tasty-hunit >=0.10 && <0.11
+    , tasty-quickcheck >=0.10 && <0.11
+  default-language: Haskell2010
+
+benchmark sparse-blob-benchmarks
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Data.SparseBlob
+      Data.SparseBlob.Helpers
+      Data.SparseBlob.Internal
+      Data.SparseBlob.Range
+      Data.SparseBlob.SimpleBlob
+      Paths_sparse_blob
+  hs-source-dirs:
+      src
+      benchmark
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , bytestring >=0.10 && <0.11
+    , containers >=0.6 && <0.7
+    , criterion >=1.5 && <1.6
+  default-language: Haskell2010
