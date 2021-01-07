@@ -26,7 +26,6 @@ module Data.SparseBlob.Internal
     -- * Internals (exposed for testing)
     -- ** Data Structures
   , Entry (..)
-  , UnpackedEntry (..)
     -- ** Type Aliases
   , Height
     -- ** Helpers
@@ -81,13 +80,6 @@ type Height = Int
 data Entry = Entry Offset ByteString
   deriving Eq
 
--- | Unpacked version of `Entry`.
---
--- Packing and unpacking `ByteString`s is expensive (/O(n)/) and should be
--- avoided. This data structure enables caching the unpacked representation,
--- which avoids repeated repacking.
-data UnpackedEntry = UnpackedEntry Offset Length [Word8]
-
 
 -- # Construction #
 
@@ -106,7 +98,7 @@ empty = BlobNil
 -- bounded by the number non non-zero /bytes/ contained).
 insert :: Offset -> Word8 -> SparseBlob -> SparseBlob
 insert off 0 = overwriteRange (off, 1) []
-insert off v = overwriteRange (off, 1) [UnpackedEntry off 1 [v]]
+insert off v = overwriteRange (off, 1) [Entry off $ BS.singleton v]
 
 -- | /O(m log (n+m))/. Inserts multiple consecutive bytes into the BLOB at the
 -- specified offset.
@@ -116,17 +108,20 @@ insert off v = overwriteRange (off, 1) [UnpackedEntry off 1 [v]]
 -- number of bytes contained or inserted, respectively.
 insertRange :: Offset -> ByteString -> SparseBlob -> SparseBlob
 insertRange off xs =
-  overwriteRange (off, BS.length xs) (toEntries off $ BS.unpack xs)
+  overwriteRange (off, BS.length xs) (toEntries off xs)
   where
   -- | /O(n)/. Converts the bytestring into a list of entries. Zero bytes are
   -- omitted within the entries.
-  toEntries :: Offset -> [Word8] -> [UnpackedEntry]
-  toEntries _ []     = []
-  toEntries i (0:xs) = toEntries (i+1) xs
-  toEntries i xs  =
-    let (ys, zs) = span (/= 0) xs
-        ysLen    = length ys
-    in UnpackedEntry i ysLen ys : toEntries (i + ysLen) zs
+  toEntries :: Offset -> ByteString -> [Entry]
+  toEntries i xs =
+    case BS.uncons xs of
+      Nothing -> [] -- All bytes consumed
+      Just (0, _) ->
+        let (xsZeros, xs') = BS.span (== 0) xs
+        in toEntries (i + BS.length xsZeros) xs'
+      Just _ ->
+        let (xsNonZeros, xs') = BS.span (/= 0) xs
+        in Entry i xsNonZeros : toEntries (i + BS.length xsNonZeros) xs'
 
 
 -- # Deletion #
@@ -287,7 +282,7 @@ allEntries (BlobNode _ _ l e r) =
 -- Precondition: The entries are disjoint and sorted. The entries are contained
 --   within the given range.
 overwriteRange :: (Offset, Length)
-               -> [UnpackedEntry]
+               -> [Entry]
                -> SparseBlob
                -> SparseBlob
 overwriteRange (off, len) newEntries b =
@@ -325,34 +320,23 @@ extractEntries (off, len) b = extractEntries' b []
 -- Precondition: The (non-unpacked) entries /touch/ the range. The unpacked
 --   entries /are contained in/ the range. Individually, both entry lists are
 --   ascending on offset and internally disjoint.
-overwriteEntries :: (Offset, Length) -> [UnpackedEntry] -> [Entry] -> [Entry]
+overwriteEntries :: (Offset, Length) -> [Entry] -> [Entry] -> [Entry]
 overwriteEntries (off, len) xs ys =
   let ysOutside = concatMap (cutContained (off, len)) ys -- length <= 2
-  in map combineEntries $ groupSliding isAdjacent $ mergeAsc xs ysOutside
+  in map combineEntries $ groupSliding isAdjacent $ mergeAscOn entryOff xs ysOutside
   where
-  combineEntries :: NonEmpty (Either UnpackedEntry Entry) -> Entry
-  combineEntries (Right x :| []) = x
+  -- | Concatenates the contained entries.
+  --
+  -- Precondition: Consecutively, the entries are adjacent.
+  combineEntries :: NonEmpty Entry -> Entry
+  combineEntries (x :| []) = x
   combineEntries (x :| xs) =
-    Entry (eOff x) $ BS.pack $ concatMap toUnpacked (x:xs)
-  toUnpacked :: Either UnpackedEntry Entry -> [Word8]
-  toUnpacked (Left (UnpackedEntry _ _ xs)) = xs
-  toUnpacked (Right e) = toUnpacked $ Left $ unpackEntry e
-  -- | Merges the ascending entry lists (by offset) into another ascending list.
-  mergeAsc :: [UnpackedEntry] -> [Entry] -> [Either UnpackedEntry Entry]
-  mergeAsc (x@(UnpackedEntry xOff _ _):xs) (y@(Entry yOff _):ys)
-    | xOff < yOff  = Left x : mergeAsc xs (y:ys)
-    | otherwise    = Right y : mergeAsc (x:xs) ys
-  mergeAsc xs [] = map Left xs
-  mergeAsc [] ys = map Right ys
+    Entry (entryOff x) $ BS.concat $ map entryData (x:xs)
+  entryData :: Entry -> ByteString
+  entryData (Entry _ xs) = xs
   -- | Returns `True` iff the entries are adjacent.
-  isAdjacent :: Either UnpackedEntry Entry -> Either UnpackedEntry Entry -> Bool
-  isAdjacent a b = eEnd a == eOff b
-
-  eOff, eEnd :: Either UnpackedEntry Entry -> Offset
-  eOff (Left  (UnpackedEntry o _ _)) = o
-  eOff (Right (Entry o _))           = o
-  eEnd (Left  (UnpackedEntry o s _)) = o + s
-  eEnd (Right (Entry o d))           = o + BS.length d
+  isAdjacent :: Entry -> Entry -> Bool
+  isAdjacent a b = entryEnd a == entryOff b
 
 -- | Internal. Insert the entries into the AVL tree.
 --
@@ -366,14 +350,6 @@ insertEntryClean newEntry (BlobNode _ _ l e r)
   | entryOff newEntry > entryEnd e  =
       buildBalanced l e (insertEntryClean newEntry r)
   | otherwise = error "Precondition violated"
-
--- | /O(n)/. Unpacks the bytes in the entry.
-unpackEntry :: Entry -> UnpackedEntry
-unpackEntry (Entry off xs) = UnpackedEntry off (BS.length xs) (BS.unpack xs)
-
--- | /O(n)/. Packs the bytes in the unpacked entry.
-packEntry :: UnpackedEntry -> Entry
-packEntry (UnpackedEntry off _ xs) = Entry off (BS.pack xs)
 
 unEntry :: Entry -> (Offset, ByteString)
 unEntry (Entry off xs) = (off, xs)

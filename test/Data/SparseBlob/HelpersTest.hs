@@ -15,7 +15,7 @@ import           Test.Tasty.QuickCheck
   ( Gen, Positive, Arbitrary, testProperty, arbitrary )
 -- Local library imports
 import           Data.SparseBlob.Helpers
-  ( maybeBinR, eqLen, overwriteWith, groupSliding )
+  ( maybeBinR, eqLen, groupSliding )
 
 
 tests :: TestTree
@@ -39,10 +39,6 @@ unitTests =
   , testCase "groupSliding" $
       assertEqual [] [[1,2,4],[7],[11,12,13],[16]]
         (map NE.toList $ groupSliding (\a b -> b - a <= 2) [1,2,4,7,11,12,13,16])
-  , testCase "overwriteWith smaller" $
-      assertEqual [] [1,2,8,9] (overwriteWith [1,2] [6,7,8,9])
-  , testCase "overwriteWith larger" $
-      assertEqual [] [1,2,3] (overwriteWith [1,2,3] [7])
   ]
 
 
@@ -60,10 +56,5 @@ quickcheckTests =
       [ testProperty "elements preserved in order" $
           \(xs::[Int]) ->
             concatMap NE.toList (groupSliding (\a b -> abs (b - a) <= 5) xs) == xs
-      ]
-  , testGroup "overwriteWith"
-      [ testProperty "max length preserved" $
-          \(xs::[Int]) ys ->
-            length (overwriteWith xs ys) == max (length xs) (length ys)
       ]
   ]

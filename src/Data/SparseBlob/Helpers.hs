@@ -6,7 +6,7 @@ module Data.SparseBlob.Helpers
   , maybeBinR
   , eqLen
   , groupSliding
-  , overwriteWith
+  , mergeAscOn
   , intercalateShow
   ) where
 
@@ -64,18 +64,14 @@ groupSliding f (x:xs) = NE.toList $ groupSliding' f (x :| xs)
     | otherwise  =
         (x :| []) <| groupSliding' f (y :| ys)
 
--- | Left-bias union of two lists
---
--- Example:
--- >>> overwriteWith [1,2] [6,7,8,9]
--- [1,2,8,9]
---
--- >>> overwriteWith [1,2,3] [7]
--- [1,2,3]
-overwriteWith :: [a] -> [a] -> [a]
-overwriteWith xs     []     = xs
-overwriteWith []     ys     = ys
-overwriteWith (x:xs) (_:ys) = x : overwriteWith xs ys
+-- | Merges lists which are ascending on the property (defined by the argument
+-- function) into another ascending list.
+mergeAscOn :: Ord b => ( a -> b ) -> [a] -> [a] -> [a]
+mergeAscOn f (x:xs) (y:ys)
+  | f x <= f y  = x : mergeAscOn f xs (y:ys)
+  | otherwise   = y : mergeAscOn f (x:xs) ys
+mergeAscOn f xs [] = xs
+mergeAscOn f [] ys = ys
 
 -- | Intercalates the `ShowS` elements with a separator `ShowS`. Like
 -- `Data.List.intercalate`, but for `ShowS` elements.
